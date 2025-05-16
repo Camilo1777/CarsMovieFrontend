@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard de Películas de Carros</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background: #f4f4f4; }
+        .dashboard-info { margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Dashboard de Películas de Carros</h1>
+    <div class="dashboard-info" id="dashboard-info"></div>
+    <table id="movies-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Año</th>
+                <th>Duración (min)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Las filas se llenarán con JS -->
+        </tbody>
+    </table>
+    <script>
+        async function fetchMovies() {
+            const url = 'https://carsmoviesinventoryproject-production.up.railway.app/api/v1/carsmovies?page=0&size=5&sort=carMovieYear,desc';
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                // Mostrar info del dashboard
+                document.getElementById('dashboard-info').innerHTML = `
+                    <strong>Página actual:</strong> ${data.CurrentPage + 1} /
+                    <strong>Total páginas:</strong> ${data.TotalPages} |
+                    <strong>Total películas:</strong> ${data.TotalElements}
+                `;
+
+                // Llenar la tabla
+                const tbody = document.querySelector('#movies-table tbody');
+                tbody.innerHTML = '';
+                data.Movies.forEach(movie => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${movie.id}</td>
+                        <td>${movie.carMovieName}</td>
+                        <td>${movie.carMovieYear}</td>
+                        <td>${movie.duration}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (error) {
+                document.getElementById('dashboard-info').textContent = 'Error al cargar los datos.';
+            }
+        }
+
+        fetchMovies();
+    </script>
+</body>
+</html>
