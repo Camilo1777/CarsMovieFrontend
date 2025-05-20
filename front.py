@@ -1,5 +1,6 @@
 from flask import Flask, render_template_string, redirect, request
 import requests
+import json
 
 app = Flask(__name__)
 
@@ -101,20 +102,61 @@ def add_movie():
 def delete_movie():
     movie_id = request.form.get("id")
     global user_movies
-    user_movies = [m for m in user_movies if m["id"] != movie_id]
+    if movie_id.startswith("user-"):
+        user_movies = [m for m in user_movies if m["id"] != movie_id]
+    else:
+        try:
+            resp = requests.delete(
+                f"{API_URL}/{movie_id}",
+                headers={"Content-Type": "application/json"},
+                timeout=5
+            )
+            print("DELETE status:", resp.status_code, resp.text)
+        except Exception as e:
+            print("Error al eliminar en la API:", e)
     return redirect("/")
 
 @app.route("/edit", methods=["GET", "POST"])
 def edit_movie():
     movie_id = request.values.get("id")
-    movie = next((m for m in user_movies if m["id"] == movie_id), None)
-    if not movie:
-        return redirect("/")
-    if request.method == "POST":
-        movie["carMovieName"] = request.form["carMovieName"]
-        movie["carMovieYear"] = request.form["carMovieYear"]
-        movie["duration"] = request.form["duration"]
-        return redirect("/")
+    # Si es local
+    if movie_id.startswith("user-"):
+        movie = next((m for m in user_movies if m["id"] == movie_id), None)
+        if not movie:
+            return redirect("/")
+        if request.method == "POST":
+            movie["carMovieName"] = request.form["carMovieName"]
+            movie["carMovieYear"] = request.form["carMovieYear"]
+            movie["duration"] = request.form["duration"]
+            return redirect("/")
+    # Si es de la API
+    else:
+        if request.method == "POST":
+            payload = {
+                "carMovieName": request.form["carMovieName"],
+                "carMovieYear": request.form["carMovieYear"],
+                "duration": request.form["duration"]
+            }
+            try:
+                resp = requests.put(
+                    f"{API_URL}/{movie_id}",
+                    data=json.dumps(payload),
+                    headers={"Content-Type": "application/json"},
+                    timeout=5
+                )
+                print("PUT status:", resp.status_code, resp.text)
+            except Exception as e:
+                print("Error al actualizar en la API:", e)
+            return redirect("/")
+        # GET: obtener datos actuales de la API
+        try:
+            resp = requests.get(f"{API_URL}/{movie_id}", timeout=5)
+            if resp.status_code == 200:
+                movie = resp.json()
+            else:
+                return redirect("/")
+        except Exception:
+            return redirect("/")
     return f"""
     <h2>Editar Película</h2>
     <form method="post">
@@ -137,10 +179,15 @@ def buscar():
         try:
             resp = requests.get(f"{API_URL}/{movie_id}", timeout=5)
             if resp.status_code == 200:
+                # Si la API devuelve un objeto con los campos correctos
                 movie = resp.json()
+                # Si la API envía los datos anidados, ajusta aquí:
+                # movie = movie.get("Movie", movie)
+            else:
+                movie = None
         except Exception:
             movie = None
-    if not movie:
+    if not movie or not all(k in movie for k in ("id", "carMovieName", "carMovieYear", "duration")):
         return "<h2>No se encontró la película con ese ID.</h2><a href='/'>Volver</a>"
     # Mostrar los datos de la película encontrada
     return f"""
