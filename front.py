@@ -3,7 +3,6 @@ import requests
 import json
 
 app = Flask(__name__)
-
 user_movies = []
 
 API_URL = "https://carsmoviesinventoryproject-production.up.railway.app/api/v1/carsmovies"
@@ -67,24 +66,69 @@ TEMPLATE = """
         </tr>
         {% endfor %}
     </table>
+    <div class="pagination">
+        {% if page > 1 %}
+            <a href="/?page={{ page - 1 }}">Anterior</a>
+        {% endif %}
+        <span>Página {{ page }} de {{ pages }}</span>
+        {% if page < pages %}
+            <a href="/?page={{ page + 1 }}">Siguiente</a>
+        {% endif %}
+    </div>
 </body>
 </html>
 """
 
 @app.route("/")
 def dashboard():
-    # Trae las películas de la API
+    page = int(request.args.get("page", 1))
+    per_page = 5
+    local_count = len(user_movies)
+
+    # SIEMPRE pide el total real de la API (aunque solo pidas 1 película)
     try:
-        resp = requests.get(API_URL, timeout=5)
-        data = resp.json()
-        api_movies = data.get("Movies", [])
+        resp_total = requests.get(f"{API_URL}?page=0&size=1", timeout=5)
+        data_total = resp_total.json()
+        total_api = data_total.get("totalElements", 0)
     except Exception:
+        total_api = 0
+
+    if page == 1:
+        api_needed = max(0, per_page - local_count)
         api_movies = []
-    # Combina las locales y las de la API (locales primero)
-    all_movies = user_movies + api_movies
+        if api_needed > 0:
+            api_url = f"{API_URL}?page=0&size={api_needed}&sort=carMovieYear,desc"
+            try:
+                resp = requests.get(api_url, timeout=5)
+                data = resp.json()
+                api_movies = data.get("Movies", [])
+            except Exception:
+                api_movies = []
+        movies_page = user_movies[:per_page] + api_movies
+    else:
+        # Calcula cuántas páginas ocupan las locales
+        local_pages = (local_count + per_page - 1) // per_page
+        api_page = page - local_pages
+        if api_page < 1:
+            movies_page = []
+        else:
+            api_url = f"{API_URL}?page={api_page-1}&size={per_page}&sort=carMovieYear,desc"
+            try:
+                resp = requests.get(api_url, timeout=5)
+                data = resp.json()
+                movies_page = data.get("Movies", [])
+            except Exception:
+                movies_page = []
+
+    # El total de páginas es locales + total de la API
+    total_all = local_count + total_api
+    pages = (total_all + per_page - 1) // per_page
+
     return render_template_string(
         TEMPLATE,
-        movies=all_movies
+        movies=movies_page,
+        page=page,
+        pages=pages
     )
 
 @app.route("/add", methods=["POST"])
@@ -97,6 +141,7 @@ def add_movie():
     }
     user_movies.insert(0, new_movie)
     return redirect("/")
+
 
 @app.route("/delete", methods=["POST"])
 def delete_movie():
@@ -170,27 +215,29 @@ def edit_movie():
     """
 
 @app.route("/buscar")
-def buscar():
-    movie_id = request.args.get("id")
-    # Buscar en las películas locales
-    movie = next((m for m in user_movies if m["id"] == movie_id), None)
-    # Si no está local, buscar en la API
-    if not movie:
-        try:
+def buscar():    
+    movie_id = request.args.get("id")  
+  # Buscar en las películas locales   
+    movie = next((m for m in user_movies if m["id"] == movie_id), None) 
+   # Si no está local, buscar en la API   
+    if not movie:      
+        try:         
             resp = requests.get(f"{API_URL}/{movie_id}", timeout=5)
-            if resp.status_code == 200:
-                # Si la API devuelve un objeto con los campos correctos
-                movie = resp.json()
-                # Si la API envía los datos anidados, ajusta aquí:
-                # movie = movie.get("Movie", movie)
-            else:
-                movie = None
-        except Exception:
-            movie = None
+            if resp.status_code == 200: 
+           # Si la API devuelve un objeto con los campos correctos
+                movie = resp.json()  
+           # Si la API envía los datos anidados, ajusta aquí:     
+            #movie = movie.get("Movie", movie)  
+            else:        
+                movie = None      
+        except Exception:       
+            movie = None   
     if not movie or not all(k in movie for k in ("id", "carMovieName", "carMovieYear", "duration")):
-        return "<h2>No se encontró la película con ese ID.</h2><a href='/'>Volver</a>"
-    # Mostrar los datos de la película encontrada
+                    
+        return "<h2>No se encontró la película con ese ID.</h2><a href='/'>Volver</a>"  
+      # Mostrar los datos de la película encontrada    
     return f"""
+
     <h2>Película encontrada</h2>
     <ul>
         <li><b>ID:</b> {movie['id']}</li>
